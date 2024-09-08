@@ -1,0 +1,4 @@
+.venv/
+clips.db
+.idea/
+__pycache__/
