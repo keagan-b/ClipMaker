@@ -135,6 +135,31 @@ def add_dir(path, should_commit: bool = False) -> models.ClipFolder:
     return models.ClipFolder(path=path, db_id=db_id)
 
 
+def remove_folder(obj: models.ClipFolder) -> None:
+    """
+    Removes a clip folder and it's children from the database
+    :param obj: The folder object to remove
+    :return:
+    """
+    cursor = DB_OBJ.cursor()
+    # get list of clips
+    clip_ids = cursor.execute("SELECT clip_id FROM clip_folder_to_clips WHERE clip_folder_id = ?;", (obj.db_id,)).fetchall()
+
+    # remove clips from database
+    for clip_id in clip_ids:
+        clip_id = clip_id[0]
+        cursor.execute("DELETE FROM clips WHERE id = ?;", (clip_id,))
+        cursor.execute("DELETE FROM clip_to_tags WHERE clip_id - ?;", (clip_id,))
+        cursor.execute("DELETE FROM clip_folder_to_clips WHERE clip_id = ?;", (clip_id,))
+
+    # remove clip folder
+    cursor.execute("DELETE FROM clip_folders WHERE id = ?;", (obj.db_id,))
+
+    cursor.close()
+
+    DB_OBJ.commit()
+
+
 def get_clip_folders() -> list[models.ClipFolder]:
     """
     :return: All clip folder objects from the database

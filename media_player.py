@@ -73,6 +73,9 @@ class MediaPlayer(tk.Frame):
         self.player.audio_set_mute(False)
         self.player.audio_set_volume(100)
 
+        # reset media position
+        self._set_time(0)
+
         # play media
         self.player.play()
 

@@ -123,10 +123,11 @@ def create_ui() -> tk.Tk:
     root.duration_variable = duration_variable
 
     favorite_label = tk.Label(clip_info_frame, text="Favorite: ")
-    favorite_box = tk.Checkbutton(clip_info_frame)
+    favorite_variable = tk.BooleanVar()
+    favorite_box = tk.Checkbutton(clip_info_frame, variable=favorite_variable)
 
     # bind favorite box to root
-    root.favorite_box = favorite_box
+    root.favorite_variable = favorite_variable
 
     tags_label = tk.Label(clip_info_frame, text="Tags")
     tags_list = tk.Listbox(clip_info_frame)
@@ -266,12 +267,32 @@ def create_ui() -> tk.Tk:
 
 
 def tree_menu_popups(event):
-    if True:
-        # selected element is directory
-        popup_menu: tk.Menu = ROOT.tree_dir_menu
-    else:
+    # get currently selected tree element
+    try:
+        selected: str = ROOT.clip_tree.selection()[0]
+    except IndexError:
+        selected = ""
+
+    if selected.startswith("C-"):
         # selected element is clip
         popup_menu: tk.Menu = ROOT.tree_clip_menu
+    else:
+        # selected element is not clip, open generic directory menu
+        popup_menu: tk.Menu = ROOT.tree_dir_menu
+
+        # reset options to prepare for changes
+        ROOT.tree_dir_menu.delete(1, 2)
+
+        if not selected.startswith("D-"):
+            # disable Remove Folder & Export Folder options
+            ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder", state="disabled")
+            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled")
+        else:
+            # enable Remove Folder & Export Folder options
+            ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder",
+                                      state="normal", command=remove_folder)
+            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder",
+                                      state="normal")
 
     try:
         popup_menu.tk_popup(event.x_root, event.y_root)
@@ -280,8 +301,16 @@ def tree_menu_popups(event):
 
 
 def add_folder():
+    """
+    Add a new folder to the clip folder view
+    :return:
+    """
     # get directory from user
     new_folder = filedialog.askdirectory(mustexist=True)
+
+    # make sure an empty folder wasn't specified
+    if new_folder == "" or new_folder is None:
+        return
 
     # check if directory is already in database
     if db_handler.does_dir_exist(new_folder) is None:
@@ -290,6 +319,35 @@ def add_folder():
 
     # refresh the loaded clips
     rescan_folders()
+    refresh_clips()
+
+
+def remove_folder():
+    """
+    Delete a folder from the database & clip tree view
+    :return:
+    """
+    global CLIP_FOLDERS
+
+    selected: str = ROOT.clip_tree.selection()[0]
+
+    for folder in CLIP_FOLDERS:
+        if folder.db_id == int(selected[2:]):
+            clip_folder = folder
+            break
+    else:
+        # no folder found, return
+        return
+
+    CLIP_FOLDERS.remove(clip_folder)
+
+    # remove node & children from the clip tree
+    ROOT.clip_tree.delete(selected)
+
+    # remove folder & children in database
+    db_handler.remove_folder(clip_folder)
+
+    # refresh tree view
     refresh_clips()
 
 
@@ -340,6 +398,9 @@ def refresh_clips() -> None:
     Refresh the clip tree with info from CLIP_FOLDERS
     :return:
     """
+    # clear tree
+    ROOT.clip_tree.delete(*ROOT.clip_tree.get_children())
+
     for clip_folder in CLIP_FOLDERS:
         folder_obj = ROOT.clip_tree.insert("", tk.END, text=clip_folder.get_dir_name(), iid=f"D-{clip_folder.db_id}")
 
@@ -356,7 +417,10 @@ def select_clip(_event) -> None:
     global CURRENT_CLIP
 
     # find selected element
-    selected: str = ROOT.clip_tree.selection()[0]
+    try:
+        selected: str = ROOT.clip_tree.selection()[0]
+    except IndexError:
+        selected = ""
 
     # only handle C- events
     if selected.startswith("C-"):
@@ -376,8 +440,11 @@ def select_clip(_event) -> None:
 
         # duration is set in the Media Player due to technical limitations
 
-        # ROOT.favorite_box.config()
+        ROOT.favorite_variable.set(clip.is_favorite)
 
+
+def hide_clip() -> None:
+    pass
 
 
 def close_app():
