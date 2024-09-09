@@ -69,6 +69,10 @@ class MediaPlayer(tk.Frame):
         # reset media length counter
         self._length = 0
 
+        # reset audio settings
+        self.player.audio_set_mute(False)
+        self.player.audio_set_volume(100)
+
         # play media
         self.player.play()
 
@@ -140,7 +144,7 @@ class MediaPlayer(tk.Frame):
                     minutes = ((time // 10) // 60)
                     seconds = ((time // 10) % 60)
 
-                    self.parent.media_timer.configure(text=f"{minutes:02}:{seconds:02}")
+                    self.parent.media_timer.configure(text=f"{minutes}:{seconds:02}")
 
                 else:
                     # get current media length (in milliseconds)
@@ -151,6 +155,12 @@ class MediaPlayer(tk.Frame):
 
                         # update slider config
                         slider.config(to=self._length)
+
+                        # update duration box
+                        minutes = ((length // 1000) // 60)
+                        seconds = ((length // 1000) % 60)
+
+                        self.parent.duration_variable.set(f"{minutes}:{seconds:02}")
 
         # set tick timer
         self._tick_timer = self.after(TICK_INCREMENT_MS, self.handle_tick)
