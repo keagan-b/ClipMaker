@@ -25,7 +25,8 @@ ROOT: tk.Tk | None = None
 ACTIVE_FRAME = (None, None)
 PREVIOUS_FRAMES = []
 
-# current clip information
+# clip information
+TAG_SECTIONS: list[TagSection] = []
 CLIP_FOLDERS: list[ClipFolder] = []
 CURRENT_CLIP: Clip | None = None
 MEDIA_PLAYER: MediaPlayer | None = None
@@ -43,7 +44,7 @@ def create_ui() -> tk.Tk:
     """
     Creates the base UI for the app
     """
-    global ROOT, MEDIA_PLAYER
+    global ROOT, MEDIA_PLAYER, TAG_SECTIONS
 
     # create new root
     root = tk.Tk()
@@ -60,7 +61,6 @@ def create_ui() -> tk.Tk:
     clip_list_frame = tk.Frame(root)
 
     clip_tree = ttk.Treeview(clip_list_frame, selectmode="browse")
-    export_all_btn = tk.Button(clip_list_frame, text="Export All")
 
     # bind clip tree variable, so it can be used in other functions
     root.clip_tree = clip_tree
@@ -101,12 +101,17 @@ def create_ui() -> tk.Tk:
     # - clip info frame -
     clip_info_frame = tk.Frame(root)
 
+    root.clip_info_frame = clip_info_frame
+
     name_label = tk.Label(clip_info_frame, text="Name:")
     name_variable = tk.StringVar()
     name_entry = tk.Entry(clip_info_frame, textvariable=name_variable)
 
     # bind name entry to root
     root.name_variable = name_variable
+
+    # add callback for variable editing
+    name_variable.trace_add("write", set_custom_name)
 
     path_label = tk.Label(clip_info_frame, text="Path:")
     path_variable = tk.StringVar()
@@ -124,16 +129,15 @@ def create_ui() -> tk.Tk:
 
     favorite_label = tk.Label(clip_info_frame, text="Favorite: ")
     favorite_variable = tk.BooleanVar()
-    favorite_box = tk.Checkbutton(clip_info_frame, variable=favorite_variable)
+    favorite_box = tk.Checkbutton(clip_info_frame, variable=favorite_variable, command=set_favorite)
 
     # bind favorite box to root
     root.favorite_variable = favorite_variable
 
     tags_label = tk.Label(clip_info_frame, text="Tags")
-    tags_list = tk.Listbox(clip_info_frame)
+    tag_list = tk.Listbox(clip_info_frame)
 
-    tag_add_btn = tk.Button(clip_info_frame, text="Add Tag")
-    tag_remove_btn = tk.Button(clip_info_frame, text="Remove Tag")
+    root.tag_list = tag_list
 
     # == place elements on frames ==
 
@@ -160,8 +164,6 @@ def create_ui() -> tk.Tk:
         clip_list_frame.rowconfigure(i, weight=1)
 
     clip_tree.grid(row=0, column=0, rowspan=12, columnspan=5)
-
-    export_all_btn.grid(row=12, column=0, columnspan=3, sticky="S")
 
     # - media control frame -
     media_control_frame.grid(row=VIDEO_HEIGHT, column=5, sticky="WSE", padx=10, pady=10)
@@ -215,10 +217,7 @@ def create_ui() -> tk.Tk:
     favorite_box.grid(row=3, column=3)
 
     tags_label.grid(row=4, column=0)
-    tags_list.grid(row=5, column=0, rowspan=6, columnspan=5)
-
-    tag_add_btn.grid(row=11, column=1, columnspan=3)
-    tag_remove_btn.grid(row=12, column=1, columnspan=3)
+    tag_list.grid(row=5, column=0, rowspan=8, columnspan=5)
 
     root.protocol("WM_DELETE_WINDOW", close_app)
 
@@ -234,23 +233,27 @@ def create_ui() -> tk.Tk:
     tree_dir_menu.add_command(label="Export Folder")
     tree_dir_menu.add_separator()
     tree_dir_menu.add_command(label="Refresh Clips", command=refresh_clips)
-    tree_dir_menu.add_command(label="Unhide Clips")
+    tree_dir_menu.add_command(label="Unhide Clips", command=unhide_clips)
 
     root.tree_dir_menu = tree_dir_menu
 
     # clip menu
     tree_clip_menu = tk.Menu(clip_list_frame, tearoff=0)
 
-    tree_clip_menu.add_command(label="Rename Clip")
-    tree_clip_menu.add_command(label="Hide Clip")
+    tree_clip_menu.add_command(label="Hide Clip", command=hide_clip)
     tree_clip_menu.add_command(label="Export Clip")
 
     root.tree_clip_menu = tree_clip_menu
 
-    # MEDIA_PLAYER.play("./testing.webm")
+    # tag menu
+
+    root.tag_menu = create_tags_menu()
 
     # set CLIP FOLDER info
     rescan_folders()
+
+    # gather Tags
+    TAG_SECTIONS = db_handler.get_all_tags()
 
     # populate clip tree
     refresh_clips()
@@ -258,15 +261,36 @@ def create_ui() -> tk.Tk:
     # == bind events ==
 
     # bind menu events on the tree
-    root.bind("<Button-3>", tree_menu_popups)
+    clip_tree.bind("<Button-3>", tree_menu_popups)
+
+    # bind menu events on tag list
+    tag_list.bind("<Button-3>", tags_menu_popup)
 
     # bind tree selection
     clip_tree.bind("<<TreeviewSelect>>", select_clip)
 
+    # start delayed commits
+    delayed_commit()
+
     return root
 
 
+def delayed_commit():
+    """
+    Delays all commits to a single point in time, allowing for the app to appear to be running smoothly
+    :return:
+    """
+    db_handler.DB_OBJ.commit()
+
+    ROOT.after(1000, delayed_commit)
+
+
 def tree_menu_popups(event):
+    """
+    Handles context menu events on the clip tree
+    :param event: Event data passed by widget
+    :return:
+    """
     # get currently selected tree element
     try:
         selected: str = ROOT.clip_tree.selection()[0]
@@ -280,19 +304,23 @@ def tree_menu_popups(event):
         # selected element is not clip, open generic directory menu
         popup_menu: tk.Menu = ROOT.tree_dir_menu
 
-        # reset options to prepare for changes
+        # reset Remove/Export &  Unhide options to prepare for changes
         ROOT.tree_dir_menu.delete(1, 2)
+        ROOT.tree_dir_menu.delete(tk.LAST, tk.LAST)
 
         if not selected.startswith("D-"):
-            # disable Remove Folder & Export Folder options
+            # disable Remove Folder, Export Folder, & Unhide Clips options
             ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder", state="disabled")
             ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled")
+            ROOT.tree_dir_menu.add(itemType="command", label="Unhide Clips", state="disabled")
         else:
-            # enable Remove Folder & Export Folder options
+            # enable Remove Folder, Export Folder, & Unhide Clips options
             ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder",
                                       state="normal", command=remove_folder)
             ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder",
                                       state="normal")
+            ROOT.tree_dir_menu.add(itemType="command", label="Unhide Clips",
+                                   state="normal", command=unhide_clips)
 
     try:
         popup_menu.tk_popup(event.x_root, event.y_root)
@@ -315,7 +343,7 @@ def add_folder():
     # check if directory is already in database
     if db_handler.does_dir_exist(new_folder) is None:
         # add new folder to database if it doesn't exist
-        db_handler.add_dir(new_folder, should_commit=True)
+        db_handler.add_dir(new_folder)
 
     # refresh the loaded clips
     rescan_folders()
@@ -327,7 +355,7 @@ def remove_folder():
     Delete a folder from the database & clip tree view
     :return:
     """
-    global CLIP_FOLDERS
+    global CLIP_FOLDERS, CURRENT_CLIP
 
     selected: str = ROOT.clip_tree.selection()[0]
 
@@ -340,6 +368,10 @@ def remove_folder():
         return
 
     CLIP_FOLDERS.remove(clip_folder)
+
+    # remove the current clip if its in this folder
+    if CURRENT_CLIP in clip_folder.clips:
+        CURRENT_CLIP = None
 
     # remove node & children from the clip tree
     ROOT.clip_tree.delete(selected)
@@ -405,7 +437,8 @@ def refresh_clips() -> None:
         folder_obj = ROOT.clip_tree.insert("", tk.END, text=clip_folder.get_dir_name(), iid=f"D-{clip_folder.db_id}")
 
         for clip in clip_folder.clips:
-            ROOT.clip_tree.insert(folder_obj, tk.END, text=clip.get_clip_name(), iid=f"C-{clip.db_id}")
+            if not clip.is_hidden:
+                ROOT.clip_tree.insert(folder_obj, tk.END, text=clip.get_clip_name(), iid=f"C-{clip.db_id}")
 
 
 def select_clip(_event) -> None:
@@ -444,6 +477,220 @@ def select_clip(_event) -> None:
 
 
 def hide_clip() -> None:
+    """
+    Hides a clip selected in the clip tree
+    :return:
+    """
+    # check that a current clip is set
+    if CURRENT_CLIP is not None:
+        # set new favorite status
+        CURRENT_CLIP.is_hidden = True
+
+        ROOT.clip_tree.delete(f"C-{CURRENT_CLIP.db_id}")
+
+        # update favorite
+        db_handler.update_clip(CURRENT_CLIP)
+
+
+def set_favorite() -> None:
+    """
+    Favorites the currently selected clip
+    :return:
+    """
+    # check that a current clip is set
+    if CURRENT_CLIP is not None:
+        # set new favorite status
+        CURRENT_CLIP.is_favorite = ROOT.favorite_variable.get()
+
+        # update favorite
+        db_handler.update_clip(CURRENT_CLIP)
+
+
+def set_custom_name(*_args) -> None:
+    # check that a current clip is set
+    if CURRENT_CLIP is not None:
+        # get new custom name
+        CURRENT_CLIP.custom_name = ROOT.name_variable.get()
+
+        # update name
+        db_handler.update_clip(CURRENT_CLIP)
+
+        # update tree
+        ROOT.clip_tree.item(f"C-{CURRENT_CLIP.db_id}", text=CURRENT_CLIP.custom_name)
+
+
+def unhide_clips() -> None:
+    """
+    Unhides clips from the currently selected Clip Folder
+    :return:
+    """
+    selected: str = ROOT.clip_tree.selection()[0]
+
+    for folder in CLIP_FOLDERS:
+        if folder.db_id == int(selected[2:]):
+            clip_folder = folder
+            break
+    else:
+        # no folder found, return
+        return
+
+    for clip in clip_folder.clips:
+        # update a clip only if it is currently hidden
+        if clip.is_hidden:
+            clip.is_hidden = False
+
+            db_handler.update_clip(clip)
+
+    # refresh UI
+    refresh_clips()
+
+
+def tags_menu_popup(event):
+    """
+    Show tag menu options
+    :param event: Event data passed by widget
+    :return:
+    """
+    # grab popup menu from reference
+    popup_menu = ROOT.tag_menu
+
+    # delete "Remove Tag"
+    ROOT.tree_dir_menu.delete(tk.END, tk.END)
+
+    # determine if tag can be removed
+    if ROOT.tag_list.get(tk.ACTIVE) != tk.NONE:
+        # enable tag remove button
+        ROOT.tree_dir_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="normal")
+    else:
+        # disable tag remove button
+        ROOT.tree_dir_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="disabled")
+
+    # show menu
+    try:
+        popup_menu.tk_popup(event.x_root, event.y_root)
+    finally:
+        popup_menu.grab_release()
+
+
+def create_tags_menu() -> tk.Menu:
+    """
+    Creates a new tag context menu with updated tags & tag sections
+    :return:
+    """
+
+    tag_menu = tk.Menu(ROOT.clip_info_frame, tearoff=0)
+
+    tag_menu.add_cascade(label="Tags:")
+
+    # loop through each Tag Section
+    for section in TAG_SECTIONS:
+        # create a new cascade menu for this section
+        cascade_menu = tk.Menu(ROOT.clip_info_frame)
+
+        # loop through child tags
+        for tag in section.tags:
+            cascade_menu.add_command(label=tag.name, command=lambda: add_tag(tag.db_id))
+
+        # add cascade menu to tag context menu
+        tag_menu.add_cascade(label=section.section_name, menu=cascade_menu)
+
+    # add seperator
+    tag_menu.add_separator()
+    # add new tag command
+    tag_menu.add_command(label="New Tag", command=create_tag_popup)
+    # add new section command
+    tag_menu.add_command(label="New Section", command=create_section_popup)
+    # delete existing section command
+    tag_menu.add_command(label="Delete Section")
+    # delete existing tag command
+    tag_menu.add_command(label="Delete Tag")
+    tag_menu.add_separator()
+    # add remove command
+    tag_menu.add_command(label="Remove Tag")
+
+    return tag_menu
+
+
+def add_tag(tag_id: int) -> None:
+    if CURRENT_CLIP is not None:
+        # get tag
+        tag = db_handler.get_tag(tag_id)
+
+        # ensure tag exists
+        if tag is not None:
+            # add tag to clip
+            db_handler.add_tag(CURRENT_CLIP.db_id, tag.id)
+
+            # add tag to list
+            ROOT.tag_list.insert(tk.END, tag.name)
+
+
+def create_section_popup() -> None:
+    """
+    Creates a popup window that requests tag section-specific information
+    :return:
+    """
+
+    popup = tk.Toplevel()
+
+    # name information
+    name_label = tk.Label(popup, text="Section Name: ")
+    name_variable = tk.StringVar()
+    name_entry = tk.Entry(popup, textvariable=name_variable)
+
+    # buttons
+    back_button = tk.Button(popup, text="Back", command=popup.destroy)
+    save_button = tk.Button(popup, text="Save", command=lambda: create_section(name_variable, popup))
+
+    # place on grid
+    popup.grid()
+
+    name_label.grid(row=0, column=0)
+    name_entry.grid(row=0, column=1, columnspan=2)
+
+    back_button.grid(row=1, column=0)
+    save_button.grid(row=1, column=1)
+
+
+def create_section(variable: tk.StringVar, popup: tk.Toplevel):
+    """
+    Creates a new section with specified string variable's value
+    :param variable: tk.StringVar to get value from
+    :param popup: window that popup originated from
+    :return:
+    """
+    global TAG_SECTIONS
+    # create new tag section and add to global variable
+    TAG_SECTIONS.append(db_handler.create_tag_section(variable.get()))
+
+    # close popup
+    popup.destroy()
+
+
+def create_tag_popup() -> None:
+    """
+    Creates a popup window that requests tag-specific information
+    :return:
+    """
+
+    # ensure there are valid tag sections first
+    if len(TAG_SECTIONS) == 0:
+        create_section_popup()
+        # check to make sure a section was created
+        if len(TAG_SECTIONS) == 0:
+            return
+
+    # create a set of section options
+    section_options = [section.section_name for section in TAG_SECTIONS]
+
+    popup = tk.Toplevel()
+
+    section_label = tk.Label(popup, text="Tag Section: ")
+    section_variable = tk.StringVar()
+    section_dropdown = tk.OptionMenu(popup, section_variable, *section_options)
+
+
+def create_tag() -> None:
     pass
 
 
@@ -456,40 +703,3 @@ def close_app():
 
     if ROOT is not None:
         ROOT.destroy()
-
-
-def change_active_frame(frame: tk.Frame | ttk.Notebook = None, update_event=None) -> None:
-    """
-    Driver function that controls the appearance of UI elements on the stack.
-
-    :param frame: Frame to add to stack & bring forward
-    :param update_event: Event to trigger when this frame is put on the top of the stack
-    :return: None.
-    """
-    global ACTIVE_FRAME, PREVIOUS_FRAMES
-
-    old_frame: tk.Frame = ACTIVE_FRAME[0]
-
-    # hide old frame
-    if old_frame is not None:
-        old_frame.grid_forget()
-
-    # active the previous active frame
-    if frame is None and len(PREVIOUS_FRAMES) > 0:
-        ACTIVE_FRAME = PREVIOUS_FRAMES.pop(-1)
-    # activate a new frame
-    else:
-        # ensure there is an active frame
-        if ACTIVE_FRAME[0] is not None:
-            # append old frame
-            PREVIOUS_FRAMES.append(ACTIVE_FRAME)
-
-        # set new frame
-        ACTIVE_FRAME = (frame, update_event)
-
-    # trigger update
-    if ACTIVE_FRAME[1] is not None:
-        ACTIVE_FRAME[1]()
-
-    # show new frame
-    ACTIVE_FRAME[0].grid(row=0, column=0, sticky="NEWS")
