@@ -314,13 +314,15 @@ def get_tags_in_section(section_id: int) -> list[models.Tag]:
     """
     cursor = DB_OBJ.cursor()
     data = cursor.execute("SELECT tag_id FROM tag_section_to_tags WHERE section_id = ?;", (section_id,)).fetchall()
-    cursor.close()
 
     tags = []
 
     # build tags and append to list
     for tag in data:
-        tags.append(build_tag_obj(tag))
+        tag_data = cursor.execute("SELECT * FROM tags WHERE id = ?;", (tag[0],)).fetchone()
+        tags.append(build_tag_obj(tag_data))
+
+    cursor.close()
 
     return tags
 
@@ -343,7 +345,7 @@ def create_tag(tag_section: int, tag_name: str) -> models.Tag:
 
     cursor.close()
 
-    return models.Tag(db_id[0], tag_name)
+    return models.Tag(db_id, tag_name)
 
 
 def delete_tag(db_id: int) -> None:
@@ -486,7 +488,11 @@ def build_tag_obj(data: list) -> models.Tag:
     :param data: Data to build tag from
     :return: Built tag object
     """
-    pass
+
+    return models.Tag(
+        db_id=data[0],
+        name=data[1]
+    )
 
 
 def build_tag_section_obj(data: list) -> models.TagSection:
@@ -495,4 +501,8 @@ def build_tag_section_obj(data: list) -> models.TagSection:
     :param data: Data to build tag section from
     :return: Built tag section object
     """
-    pass
+
+    return models.TagSection(
+        db_id=data[0],
+        section_name=data[1]
+    )

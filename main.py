@@ -29,7 +29,6 @@ def main():
 
     # create UI
     ui_root = ui.create_ui()
-    # ui_root = ui.temp_ui()
 
     # start main UI loop
     ui_root.mainloop()

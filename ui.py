@@ -245,15 +245,14 @@ def create_ui() -> tk.Tk:
 
     root.tree_clip_menu = tree_clip_menu
 
-    # tag menu
+    # gather Tags
+    TAG_SECTIONS = db_handler.get_all_tags()
 
+    # generate tag menu
     root.tag_menu = create_tags_menu()
 
     # set CLIP FOLDER info
     rescan_folders()
-
-    # gather Tags
-    TAG_SECTIONS = db_handler.get_all_tags()
 
     # populate clip tree
     refresh_clips()
@@ -585,7 +584,7 @@ def create_tags_menu() -> tk.Menu:
     # loop through each Tag Section
     for section in TAG_SECTIONS:
         # create a new cascade menu for this section
-        cascade_menu = tk.Menu(ROOT.clip_info_frame)
+        cascade_menu = tk.Menu(ROOT.clip_info_frame, tearoff=0)
 
         # loop through child tags
         for tag in section.tags:
@@ -596,14 +595,18 @@ def create_tags_menu() -> tk.Menu:
 
     # add seperator
     tag_menu.add_separator()
+
     # add new tag command
     tag_menu.add_command(label="New Tag", command=create_tag_popup)
+    # delete existing tag command
+    tag_menu.add_command(label="Delete Tag")
+
+    tag_menu.add_separator()
     # add new section command
     tag_menu.add_command(label="New Section", command=create_section_popup)
     # delete existing section command
     tag_menu.add_command(label="Delete Section")
-    # delete existing tag command
-    tag_menu.add_command(label="Delete Tag")
+
     tag_menu.add_separator()
     # add remove command
     tag_menu.add_command(label="Remove Tag")
@@ -649,7 +652,7 @@ def create_section_popup() -> None:
     name_entry.grid(row=0, column=1, columnspan=2)
 
     back_button.grid(row=1, column=0)
-    save_button.grid(row=1, column=1)
+    save_button.grid(row=1, column=2)
 
 
 def create_section(variable: tk.StringVar, popup: tk.Toplevel):
@@ -662,6 +665,9 @@ def create_section(variable: tk.StringVar, popup: tk.Toplevel):
     global TAG_SECTIONS
     # create new tag section and add to global variable
     TAG_SECTIONS.append(db_handler.create_tag_section(variable.get()))
+
+    # refresh tag menu
+    ROOT.tag_menu = create_tags_menu()
 
     # close popup
     popup.destroy()
@@ -687,11 +693,57 @@ def create_tag_popup() -> None:
 
     section_label = tk.Label(popup, text="Tag Section: ")
     section_variable = tk.StringVar()
+    section_variable.set(section_options[0])
     section_dropdown = tk.OptionMenu(popup, section_variable, *section_options)
 
+    name_label = tk.Label(popup, text="Tag Name: ")
+    name_variable = tk.StringVar()
+    name_entry = tk.Entry(popup, textvariable=name_variable)
 
-def create_tag() -> None:
-    pass
+    # buttons
+    back_button = tk.Button(popup, text="Back", command=popup.destroy)
+    save_button = tk.Button(popup, text="Save", command=lambda: create_tag(section_variable, name_variable, popup))
+
+    # place items on grid
+    popup.grid()
+
+    section_label.grid(row=0, column=0)
+    section_dropdown.grid(row=0, column=1, columnspan=2)
+
+    name_label.grid(row=1, column=0)
+    name_entry.grid(row=1, column=1, columnspan=2)
+
+    back_button.grid(row=2, column=0)
+    save_button.grid(row=2, column=2)
+
+
+def create_tag(section_variable: tk.StringVar, name_variable: tk.StringVar, popup: tk.Toplevel) -> None:
+    """
+    Creates a new tag from a section name, tag name, and a popup frame
+    :param section_variable: variable containing the section name
+    :param name_variable: variable containing the new tag name
+    :param popup: popup frame reference
+    :return:
+    """
+    chosen_section = section_variable.get()
+
+    # find section object
+    for section in TAG_SECTIONS:
+        if section.section_name == chosen_section:
+            chosen_section = section
+            break
+    else:
+        # section not found
+        return
+
+    # create new tag
+    db_handler.create_tag(chosen_section.db_id, name_variable.get())
+
+    # reload tag context menu
+    ROOT.tag_menu = create_tags_menu()
+
+    # close popup
+    popup.destroy()
 
 
 def close_app():
