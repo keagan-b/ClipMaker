@@ -258,6 +258,7 @@ def update_clip(clip: models.Clip) -> None:
     :param clip: Clip object to save
     :return:
     """
+
     cursor = DB_OBJ.cursor()
     cursor.execute("""
     UPDATE clips SET
@@ -270,7 +271,7 @@ def update_clip(clip: models.Clip) -> None:
     WHERE id = ?
     """,
                    (clip.path, clip.custom_name,
-                    clip.is_favorite, clip.is_hidden,
+                    int(clip.is_favorite), int(clip.is_hidden),
                     clip.trimmed_start, clip.trimmed_end,
                     clip.db_id))
     cursor.close()

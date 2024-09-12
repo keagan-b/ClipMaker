@@ -567,7 +567,7 @@ def set_end_time(*_args) -> None:
     if CURRENT_CLIP is not None:
         # get new end time
         try:
-            CURRENT_CLIP.custom_name = get_milliseconds_from_time(ROOT.end_variable.get())
+            CURRENT_CLIP.trimmed_end = get_milliseconds_from_time(ROOT.end_variable.get())
         except AttributeError:
             return
 
