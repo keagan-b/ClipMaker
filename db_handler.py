@@ -439,7 +439,7 @@ def get_tags_on_clip(clip_id: int) -> list[models.Tag]:
     tags = []
     for tag in tag_ids:
         # Get tag info from tag ids & add to the list
-        data = cursor.execute("SELECT * FROM tags WHERE id = ?", (tag[0])).fetchone()
+        data = cursor.execute("SELECT * FROM tags WHERE id = ?", (tag[0],)).fetchone()
         tags.append(build_tag_obj(data))
 
     cursor.close()

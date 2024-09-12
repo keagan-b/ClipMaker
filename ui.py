@@ -93,10 +93,22 @@ def create_ui() -> tk.Tk:
     root.play_btn = play_btn
 
     start_label = tk.Label(media_control_frame, text="Start: ")
-    start_entry = tk.Entry(media_control_frame)
+    start_variable = tk.StringVar()
+    start_entry = tk.Entry(media_control_frame, textvariable=start_variable)
 
-    end_label = tk.Label(media_control_frame, text="End:")
-    end_entry = tk.Entry(media_control_frame)
+    root.start_variable = start_variable
+
+    # add callback for variable editing
+    start_variable.trace_add("write", set_start_time)
+
+    end_label = tk.Label(media_control_frame, text="End: ")
+    end_variable = tk.StringVar()
+    end_entry = tk.Entry(media_control_frame, textvariable=end_variable)
+
+    root.end_variable = end_variable
+
+    # add callback for variable editing
+    end_variable.trace_add("write", set_end_time)
 
     # - clip info frame -
     clip_info_frame = tk.Frame(root)
@@ -474,6 +486,25 @@ def select_clip(_event) -> None:
 
         ROOT.favorite_variable.set(clip.is_favorite)
 
+        # clear tag list
+        ROOT.tag_list.delete(0, tk.END)
+
+        # add tags to list
+        for tag in clip.tags:
+            ROOT.tag_list.insert(tk.END, tag.name)
+
+        # set start entry
+        if clip.trimmed_start != -1:
+            ROOT.start_variable.set(get_time_from_milliseconds(clip.trimmed_start))
+        else:
+            ROOT.start_variable.set("00:00")
+
+        # set end entry
+        if clip.trimmed_end != -1:
+            ROOT.end_variable.set(get_time_from_milliseconds(clip.trimmed_end))
+        else:
+            ROOT.end_variable.set("00:00")
+
 
 def hide_clip() -> None:
     """
@@ -518,6 +549,63 @@ def set_custom_name(*_args) -> None:
         ROOT.clip_tree.item(f"C-{CURRENT_CLIP.db_id}", text=CURRENT_CLIP.custom_name)
 
 
+def set_start_time(*_args) -> None:
+    # check that a current clip is set
+    if CURRENT_CLIP is not None:
+        # get new start time
+        try:
+            CURRENT_CLIP.trimmed_start = get_milliseconds_from_time(ROOT.start_variable.get())
+        except AttributeError:
+            return
+
+        # update name
+        db_handler.update_clip(CURRENT_CLIP)
+
+
+def set_end_time(*_args) -> None:
+    # check that a current clip is set
+    if CURRENT_CLIP is not None:
+        # get new end time
+        try:
+            CURRENT_CLIP.custom_name = get_milliseconds_from_time(ROOT.end_variable.get())
+        except AttributeError:
+            return
+
+        # update name
+        db_handler.update_clip(CURRENT_CLIP)
+
+
+def get_milliseconds_from_time(time_value: str) -> int:
+    """
+    Converts a timestamp to milliseconds
+    :param time_value: The time value in a mm:ss format
+    :return: Number of milliseconds
+    """
+    try:
+        minutes, seconds = list(map(int, time_value.split(":")))
+    except ValueError:
+        return 0
+
+    seconds += minutes * 60
+
+    return seconds * 1000
+
+
+def get_time_from_milliseconds(milliseconds: int) -> str:
+    """
+    Converts a milliseconds to timestamp
+    :param milliseconds: Millisecond count
+    :return: Time in a mm:ss format
+    """
+    # make sure a current clip exists
+    seconds = milliseconds // 1000
+
+    minutes = seconds // 60
+    seconds %= 60
+
+    return f"{minutes:02}:{seconds:02}"
+
+
 def unhide_clips() -> None:
     """
     Unhides clips from the currently selected Clip Folder
@@ -525,6 +613,7 @@ def unhide_clips() -> None:
     """
     selected: str = ROOT.clip_tree.selection()[0]
 
+    # find folder in objects
     for folder in CLIP_FOLDERS:
         if folder.db_id == int(selected[2:]):
             clip_folder = folder
@@ -554,15 +643,31 @@ def tags_menu_popup(event):
     popup_menu = ROOT.tag_menu
 
     # delete "Remove Tag"
-    ROOT.tree_dir_menu.delete(tk.END, tk.END)
+    popup_menu.delete(tk.END, tk.END)
+
+    # get selected tag
+    selected_tag = ROOT.tag_list.get(tk.ACTIVE)
+
+    # check if tag is in clip
+    if CURRENT_CLIP is not None:
+        for tag in CURRENT_CLIP.tags:
+            if tag.name == selected_tag:
+                break
+        else:
+            # no tag found
+            tag = None
+    else:
+        # no clip, no tags
+        tag = None
 
     # determine if tag can be removed
-    if ROOT.tag_list.get(tk.ACTIVE) != tk.NONE:
+    if tag is not None:
         # enable tag remove button
-        ROOT.tree_dir_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="normal")
+        popup_menu.insert(index=tk.END, itemType="command", label="Remove Tag",
+                                  state="normal", command=remove_tag)
     else:
         # disable tag remove button
-        ROOT.tree_dir_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="disabled")
+        popup_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="disabled")
 
     # show menu
     try:
@@ -620,9 +725,12 @@ def add_tag(tag_id: int) -> None:
         tag = db_handler.get_tag(tag_id)
 
         # ensure tag exists
-        if tag is not None:
+        if tag is not None and tag not in CURRENT_CLIP.tags:
+            # add tag to clip tag list
+            CURRENT_CLIP.tags.append(tag)
+
             # add tag to clip
-            db_handler.add_tag(CURRENT_CLIP.db_id, tag.id)
+            db_handler.add_tag(CURRENT_CLIP.db_id, tag.db_id)
 
             # add tag to list
             ROOT.tag_list.insert(tk.END, tag.name)
@@ -737,13 +845,39 @@ def create_tag(section_variable: tk.StringVar, name_variable: tk.StringVar, popu
         return
 
     # create new tag
-    db_handler.create_tag(chosen_section.db_id, name_variable.get())
+    tag = db_handler.create_tag(chosen_section.db_id, name_variable.get())
+
+    # add tag to section tag list
+    chosen_section.tags.append(tag)
 
     # reload tag context menu
     ROOT.tag_menu = create_tags_menu()
 
     # close popup
     popup.destroy()
+
+
+def remove_tag():
+    active_tag = ROOT.tag_list.get(tk.ACTIVE)
+
+    if CURRENT_CLIP is not None:
+        # find tag in current clip tags
+        for tag in CURRENT_CLIP.tags:
+            if tag.name == active_tag:
+                break
+        else:
+            tag = None
+
+        # check if tag was found
+        if tag is not None:
+            # remove tag from list
+            CURRENT_CLIP.tags.remove(tag)
+
+            # remove tag in DB
+            db_handler.remove_tag(CURRENT_CLIP.db_id, tag.db_id)
+
+            # refresh UI
+            select_clip(None)
 
 
 def close_app():
