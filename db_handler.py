@@ -296,7 +296,7 @@ def create_tag_section(section_name: str) -> models.TagSection:
 def delete_tag_section(db_id: int) -> None:
     cursor = DB_OBJ.cursor()
     # get all tags associated to this section
-    tags = cursor.execute("SELECT id FROM tag_section_to_tags WHERE section_id = ?;", (db_id,)).fetchall()
+    tags = cursor.execute("SELECT tag_id FROM tag_section_to_tags WHERE section_id = ?;", (db_id,)).fetchall()
 
     for tag in tags:
         # delete tag
@@ -440,7 +440,7 @@ def get_tags_on_clip(clip_id: int) -> list[models.Tag]:
     tags = []
     for tag in tag_ids:
         # Get tag info from tag ids & add to the list
-        data = cursor.execute("SELECT * FROM tags WHERE id = ?", (tag[0],)).fetchone()
+        data = cursor.execute("SELECT * FROM tags WHERE id = ?", (tag[2],)).fetchone()
         tags.append(build_tag_obj(data))
 
     cursor.close()

@@ -27,5 +27,5 @@ The majority of this project uses preinstalled packages (such as `tkinter` for U
 - [x] Tag creation & assignment
 - [x] Tag sections/groups
 - [ ] Clip filtering/sorting with tags
-- [ ] UI rework
 - [ ] Clip export options
+- [ ] UI rework

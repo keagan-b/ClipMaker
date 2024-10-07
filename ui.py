@@ -1,5 +1,4 @@
 """
-
 Developed by Keagan B
 ClipMaker -- ui.py
 
@@ -13,8 +12,10 @@ Each window is defined as its own function, and is placed on the UI stack throug
 from __future__ import annotations
 
 import os
+from utils import get_time_from_milliseconds, get_milliseconds_from_time
 from media_player import MediaPlayer, MediaSlider
 from tkinter import filedialog, ttk
+from functools import partial
 import tkinter as tk
 from tkinter import ttk
 import db_handler
@@ -503,7 +504,8 @@ def select_clip(_event) -> None:
         if clip.trimmed_end != -1:
             ROOT.end_variable.set(get_time_from_milliseconds(clip.trimmed_end))
         else:
-            ROOT.end_variable.set("00:00")
+            # tick update handles times set as "-1".
+            ROOT.end_variable.set("-1")
 
 
 def hide_clip() -> None:
@@ -575,37 +577,6 @@ def set_end_time(*_args) -> None:
         db_handler.update_clip(CURRENT_CLIP)
 
 
-def get_milliseconds_from_time(time_value: str) -> int:
-    """
-    Converts a timestamp to milliseconds
-    :param time_value: The time value in a mm:ss format
-    :return: Number of milliseconds
-    """
-    try:
-        minutes, seconds = list(map(int, time_value.split(":")))
-    except ValueError:
-        return 0
-
-    seconds += minutes * 60
-
-    return seconds * 1000
-
-
-def get_time_from_milliseconds(milliseconds: int) -> str:
-    """
-    Converts a milliseconds to timestamp
-    :param milliseconds: Millisecond count
-    :return: Time in a mm:ss format
-    """
-    # make sure a current clip exists
-    seconds = milliseconds // 1000
-
-    minutes = seconds // 60
-    seconds %= 60
-
-    return f"{minutes:02}:{seconds:02}"
-
-
 def unhide_clips() -> None:
     """
     Unhides clips from the currently selected Clip Folder
@@ -664,7 +635,7 @@ def tags_menu_popup(event):
     if tag is not None:
         # enable tag remove button
         popup_menu.insert(index=tk.END, itemType="command", label="Remove Tag",
-                                  state="normal", command=remove_tag)
+                          state="normal", command=remove_tag)
     else:
         # disable tag remove button
         popup_menu.insert(index=tk.END, itemType="command", label="Remove Tag", state="disabled")
@@ -693,7 +664,7 @@ def create_tags_menu() -> tk.Menu:
 
         # loop through child tags
         for tag in section.tags:
-            cascade_menu.add_command(label=tag.name, command=lambda: add_tag(tag.db_id))
+            cascade_menu.add_command(label=tag.name, command=partial(add_tag, tag.db_id))
 
         # add cascade menu to tag context menu
         tag_menu.add_cascade(label=section.section_name, menu=cascade_menu)
@@ -704,13 +675,13 @@ def create_tags_menu() -> tk.Menu:
     # add new tag command
     tag_menu.add_command(label="New Tag", command=create_tag_popup)
     # delete existing tag command
-    tag_menu.add_command(label="Delete Tag")
+    tag_menu.add_command(label="Delete Tag", command=create_tag_delete_popup)
 
     tag_menu.add_separator()
     # add new section command
     tag_menu.add_command(label="New Section", command=create_section_popup)
     # delete existing section command
-    tag_menu.add_command(label="Delete Section")
+    tag_menu.add_command(label="Delete Section", command=create_section_delete_popup)
 
     tag_menu.add_separator()
     # add remove command
@@ -725,7 +696,8 @@ def add_tag(tag_id: int) -> None:
         tag = db_handler.get_tag(tag_id)
 
         # ensure tag exists
-        if tag is not None and tag not in CURRENT_CLIP.tags:
+        existing_tags = [x.db_id for x in CURRENT_CLIP.tags]
+        if tag is not None and tag.db_id not in existing_tags:
             # add tag to clip tag list
             CURRENT_CLIP.tags.append(tag)
 
@@ -878,6 +850,198 @@ def remove_tag():
 
             # refresh UI
             select_clip(None)
+
+
+def change_tag_dropdown(*_args) -> None:
+    """
+    Changes the tags listed in the tag dropdown when deleting a tag
+    :return:
+    """
+    try:
+        section_variable: tk.StringVar = ROOT.section_variable
+        tag_dropdown: tk.OptionMenu = ROOT.tag_dropdown
+        tag_var: tk.StringVar = ROOT.tag_variable
+    except AttributeError:
+        print("objs not found")
+        return
+
+    chosen_section = section_variable.get()
+
+    # find section object
+    for section in TAG_SECTIONS:
+        if section.section_name == chosen_section:
+            chosen_section = section
+            break
+    else:
+        # section not found
+        return
+
+    # get tags
+    tags = db_handler.get_tags_in_section(chosen_section.db_id)
+
+    # delete existing tag options
+    tag_dropdown['menu'].delete(0, tk.END)
+
+    for tag in tags:
+        # add in new options
+        tag_dropdown['menu'].add_command(label=tag.name)
+
+    tag_var.set(tags[0].name)
+
+
+def create_tag_delete_popup() -> None:
+    """
+    Creates a popup window that requests which tag to delete
+    :return:
+    """
+    global ROOT
+
+    # ensure there are valid tag sections first
+    if len(TAG_SECTIONS) == 0:
+        create_section_popup()
+        # check to make sure a section was created
+        if len(TAG_SECTIONS) == 0:
+            return
+
+    # create a set of section options
+    section_options = [section.section_name for section in TAG_SECTIONS]
+    section_tags = db_handler.get_tags_in_section(TAG_SECTIONS[0].db_id)
+
+    popup = tk.Toplevel()
+
+    tag_label = tk.Label(popup, text="Tag: ")
+    tag_variable = tk.StringVar()
+    tag_variable.set(section_tags[0].name)
+    tag_dropdown = tk.OptionMenu(popup, tag_variable, *[tag.name for tag in section_tags])
+
+    section_label = tk.Label(popup, text="Tag Section: ")
+    section_variable = tk.StringVar()
+    section_variable.set(section_options[0])
+    section_dropdown = tk.OptionMenu(popup, section_variable, *section_options)
+
+    # set global variables
+    ROOT.section_variable = section_variable
+    ROOT.tag_dropdown = tag_dropdown
+    ROOT.tag_variable = tag_variable
+
+    section_variable.trace_add("write", change_tag_dropdown)
+
+    # buttons
+    back_button = tk.Button(popup, text="Back", command=popup.destroy)
+    save_button = tk.Button(popup, text="Delete", command=lambda: delete_tag(section_variable, tag_variable, popup))
+
+    # place items on grid
+    popup.grid()
+
+    section_label.grid(row=0, column=0)
+    section_dropdown.grid(row=0, column=1, columnspan=2)
+
+    tag_label.grid(row=1, column=0)
+    tag_dropdown.grid(row=1, column=1, columnspan=2)
+
+    back_button.grid(row=2, column=0)
+    save_button.grid(row=2, column=2)
+
+
+def create_section_delete_popup() -> None:
+    """
+    Creates a popup window that requests which section to delete
+    :return:
+    """
+
+    # ensure there are valid tag sections first
+    if len(TAG_SECTIONS) == 0:
+        create_section_popup()
+        # check to make sure a section was created
+        if len(TAG_SECTIONS) == 0:
+            return
+
+    # create a set of section options
+    section_options = [section.section_name for section in TAG_SECTIONS]
+
+    popup = tk.Toplevel()
+
+    section_label = tk.Label(popup, text="Tag Section: ")
+    section_variable = tk.StringVar()
+    section_variable.set(section_options[0])
+    section_dropdown = tk.OptionMenu(popup, section_variable, *section_options)
+
+    # buttons
+    back_button = tk.Button(popup, text="Back", command=popup.destroy)
+    save_button = tk.Button(popup, text="Delete", command=lambda: delete_section(section_variable, popup))
+
+    # place items on grid
+    popup.grid()
+
+    section_label.grid(row=0, column=0)
+    section_dropdown.grid(row=0, column=1, columnspan=2)
+
+    back_button.grid(row=1, column=0)
+    save_button.grid(row=1, column=2)
+
+
+def delete_tag(section_variable: tk.StringVar, tag_variable: tk.StringVar, popup: tk.Toplevel) -> None:
+    chosen_section = section_variable.get()
+
+    # find section object
+    for section in TAG_SECTIONS:
+        if section.section_name == chosen_section:
+            chosen_section = section
+            break
+    else:
+        # section not found
+        return
+
+    chosen_tag = tag_variable.get()
+    for tag in db_handler.get_tags_in_section(chosen_section.db_id):
+        if tag.name == chosen_tag:
+            chosen_tag = tag
+            break
+    else:
+        return
+
+    db_handler.delete_tag(chosen_tag.db_id)
+
+    # reload tag context menu
+    ROOT.tag_menu = create_tags_menu()
+
+    # refresh UI
+    select_clip(None)
+
+    # close popup
+    popup.destroy()
+
+
+def delete_section(section_variable: tk.StringVar, popup: tk.Toplevel) -> None:
+    """
+    Deletes a tag section
+    :param section_variable: variable containing the section name
+    :param popup: popup frame reference
+    :return:
+    """
+    chosen_section = section_variable.get()
+
+    # find section object
+    for section in TAG_SECTIONS:
+        if section.section_name == chosen_section:
+            chosen_section = section
+            TAG_SECTIONS.remove(section)
+            break
+    else:
+        # section not found
+        popup.destroy()
+        return
+
+    db_handler.delete_tag_section(chosen_section.db_id)
+
+    # reload tag context menu
+    ROOT.tag_menu = create_tags_menu()
+
+    # refresh UI
+    select_clip(None)
+
+    # close popup
+    popup.destroy()
 
 
 def close_app():

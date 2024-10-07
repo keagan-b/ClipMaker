@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
+import utils
 import vlc
 
 TICK_INCREMENT_MS = 100
@@ -76,6 +77,13 @@ class MediaPlayer(tk.Frame):
         # reset media position
         self._set_time(0)
 
+        # reset time slider
+        if self.parent.media_slider:
+            self.parent.media_slider.set(0)
+
+        # reset play text
+        self.parent.play_btn.configure(text="⏸")
+
         # play media
         self.player.play()
 
@@ -105,9 +113,9 @@ class MediaPlayer(tk.Frame):
             self.player.pause()
 
         if is_playing:
-            button_value = "⏸"
-        else:
             button_value = "⏵"
+        else:
+            button_value = "⏸"
 
         # change play button text
         self.parent.play_btn.configure(text=button_value)
@@ -164,6 +172,18 @@ class MediaPlayer(tk.Frame):
                         seconds = ((length // 1000) % 60)
 
                         self.parent.duration_variable.set(f"{minutes}:{seconds:02}")
+
+            try:
+                end_var : tk.StringVar | None = self.parent.end_variable
+            except AttributeError:
+                end_var = None
+
+            # update end time
+            if end_var:
+                # check if variable is unset
+                if end_var.get() == "-1":
+                    # set correct max length
+                    end_var.set(utils.get_time_from_milliseconds(self.player.get_length()))
 
         # set tick timer
         self._tick_timer = self.after(TICK_INCREMENT_MS, self.handle_tick)
