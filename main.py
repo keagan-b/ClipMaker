@@ -7,12 +7,11 @@ Creates database connection & starts UI loop
 
 TODO:
 UI Scaling
-Filtering
 Clip exporting
 Folder exporting
 Previous/Next buttons
-Bind space to pause/unpause
 Restart video after reaching end
+Subfolder support
 """
 import os
 import db_handler

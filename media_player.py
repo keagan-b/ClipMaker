@@ -32,6 +32,7 @@ class MediaPlayer(tk.Frame):
 
         # create new VLC player
         self.player = self.Instance.media_player_new()
+        self.current_path = ""
 
         # create video frame & video canvas
         self.video_frame = ttk.Frame(self.parent)
@@ -51,10 +52,16 @@ class MediaPlayer(tk.Frame):
         # media length tracker
         self._length = 0
 
+        # add media stop handler
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self.on_stop)
+
         # start first tick
         self.handle_tick()
 
     def play(self, path):
+        # set currently playing
+        self.current_path = path
+
         # get media
         media = self.Instance.media_new(path)
 
@@ -83,7 +90,6 @@ class MediaPlayer(tk.Frame):
 
         # reset play text
         self.parent.play_btn.configure(text="⏸")
-
         # play media
         self.player.play()
 
@@ -97,7 +103,7 @@ class MediaPlayer(tk.Frame):
 
             self._set_time(current_time + increment)
 
-    def change_play_state(self) -> None:
+    def change_play_state(self, *_args) -> None:
         """
         Toggles the current play state of the media
         :return:
@@ -187,6 +193,12 @@ class MediaPlayer(tk.Frame):
 
         # set tick timer
         self._tick_timer = self.after(TICK_INCREMENT_MS, self.handle_tick)
+
+    def on_stop(self, *_args):
+        if self.current_path != "":
+            self.player.close()
+            self.player.set_time(0)
+            self.player.play()
 
     def _set_time(self, milliseconds: int) -> None:
         """

@@ -405,6 +405,23 @@ def get_tag(db_id: int) -> models.Tag | None:
         return None
 
 
+def get_tag_owner_section(tag_id: int) -> models.TagSection | None:
+    """
+    Get a section based on a tag's id
+    :param tag_id: ID of the tag
+    :return: Section object that owns the tag, or None if no section is found
+    """
+    cursor = DB_OBJ.cursor()
+    section_id = cursor.execute("SELECT section_id FROM tag_section_to_tags WHERE tag_id = ?", (tag_id,)).fetchone()
+    data = cursor.execute("SELECT * FROM tag_sections WHERE id = ?", (section_id[0],)).fetchone()
+    cursor.close()
+
+    if data is not None:
+        return build_tag_section_obj(data)
+    else:
+        return None
+
+
 def get_all_tags() -> list[models.TagSection]:
     """
     Find all tags and tag sections
@@ -446,6 +463,23 @@ def get_tags_on_clip(clip_id: int) -> list[models.Tag]:
     cursor.close()
 
     return tags
+
+
+def has_tag(clip_id: int, tag_id: int) -> bool:
+    """
+    Checks if a tag is present on a clip
+    :param clip_id: Clip ID to check
+    :param tag_id: Tag ID to check
+    :return: True if the tag is on the clip, False if the tag is not on the clip.
+    """
+    cursor = DB_OBJ.cursor()
+    data = cursor.execute("SELECT * FROM clip_to_tags WHERE clip_id = ? AND tag_id = ?", (clip_id, tag_id)).fetchone()
+    cursor.close()
+
+    if data is not None:
+        return True
+    else:
+        return False
 
 
 def build_clip_obj(data: list) -> models.Clip:

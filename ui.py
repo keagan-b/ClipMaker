@@ -30,6 +30,7 @@ PREVIOUS_FRAMES = []
 TAG_SECTIONS: list[TagSection] = []
 CLIP_FOLDERS: list[ClipFolder] = []
 CURRENT_CLIP: Clip | None = None
+CURRENT_FILTER = []
 MEDIA_PLAYER: MediaPlayer | None = None
 
 VIDEO_SCALE = 1
@@ -62,6 +63,7 @@ def create_ui() -> tk.Tk:
     clip_list_frame = tk.Frame(root)
 
     clip_tree = ttk.Treeview(clip_list_frame, selectmode="browse")
+    filter_button = tk.Button(text="🝖", command=open_filter_menu)
 
     # bind clip tree variable, so it can be used in other functions
     root.clip_tree = clip_tree
@@ -177,6 +179,7 @@ def create_ui() -> tk.Tk:
         clip_list_frame.rowconfigure(i, weight=1)
 
     clip_tree.grid(row=0, column=0, rowspan=12, columnspan=5)
+    filter_button.grid(row=6, column=0)
 
     # - media control frame -
     media_control_frame.grid(row=VIDEO_HEIGHT, column=5, sticky="WSE", padx=10, pady=10)
@@ -280,6 +283,9 @@ def create_ui() -> tk.Tk:
 
     # bind tree selection
     clip_tree.bind("<<TreeviewSelect>>", select_clip)
+
+    # bind spacebar to pause/resume
+    ROOT.bind("<space>", MEDIA_PLAYER.change_play_state)
 
     # start delayed commits
     delayed_commit()
@@ -449,7 +455,21 @@ def refresh_clips() -> None:
         folder_obj = ROOT.clip_tree.insert("", tk.END, text=clip_folder.get_dir_name(), iid=f"D-{clip_folder.db_id}")
 
         for clip in clip_folder.clips:
-            if not clip.is_hidden:
+            # check if clips match current filter
+            matching = True
+
+            for section in range(len(CURRENT_FILTER)):
+                for tag in CURRENT_FILTER[section][-1]:
+                    if not db_handler.has_tag(clip.db_id, tag):
+                        # clip is not on tag
+                        matching = False
+                        break
+
+                # clip does not match filter, skip
+                if not matching:
+                    break
+
+            if not clip.is_hidden and matching:
                 ROOT.clip_tree.insert(folder_obj, tk.END, text=clip.get_clip_name(), iid=f"C-{clip.db_id}")
 
 
@@ -1042,6 +1062,168 @@ def delete_section(section_variable: tk.StringVar, popup: tk.Toplevel) -> None:
 
     # close popup
     popup.destroy()
+
+
+def open_filter_menu() -> None:
+    """
+    UI for handling filters
+    :return:
+    """
+    global CURRENT_FILTER, ROOT
+
+    popup = tk.Toplevel()
+    ROOT.filter_popup = popup
+
+    # tag lists
+    tag_tree_list = ttk.Treeview(popup)
+    selected_tag_list = ttk.Treeview(popup)
+
+    # add tag lists to root
+    ROOT.tag_tree_list = tag_tree_list
+    ROOT.selected_tag_list = selected_tag_list
+
+    # central tag movement buttons
+    add_button = tk.Button(popup, text="Add", command=add_tag_filter)
+    remove_button = tk.Button(popup, text="Remove", command=remove_tag_filter)
+
+    # control buttons
+    cancel_button = tk.Button(popup, text="Cancel")
+    clear_button = tk.Button(popup, text="Clear", command=clear_tag_filter)
+    apply_button = tk.Button(popup, text="Apply", command=apply_tag_filter)
+
+    # add contents to tag_tree_list
+    for section in TAG_SECTIONS:
+        # add section to tree list
+        section_item = tag_tree_list.insert("", tk.END, text=section.section_name, iid=f"S-{section.db_id}")
+        for tag in db_handler.get_tags_in_section(section.db_id):
+            # add tags to section
+            tag_tree_list.insert(section_item, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
+
+    # add current_filter items to selected_tag_list
+    for section, tags in CURRENT_FILTER:
+        # add section to tree list
+        section_item = tag_tree_list.insert("", tk.END, text=section.section_name, iid=f"S-{section.db_id}")
+        for tag in tags:
+            # add tags to section
+            tag_tree_list.insert(section_item, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
+
+    # place objects on popup
+    popup.grid()
+
+    # add tag tree
+    tag_tree_list.grid(row=0, column=0, rowspan=6, columnspan=3)
+
+    # add central buttons
+    add_button.grid(row=2, column=3)
+    remove_button.grid(row=3, column=3)
+
+    # add selected tree
+    selected_tag_list.grid(row=0, column=4, rowspan=6, columnspan=3)
+
+    # add button buttons
+    cancel_button.grid(row=6, column=1)
+    clear_button.grid(row=6, column=3)
+    apply_button.grid(row=6, column=5)
+
+
+def add_tag_filter():
+    """
+    Adds a new tag or section to the filter list
+    :return:
+    """
+
+    # ensure tag lists exist
+    if ROOT.tag_tree_list is not None and ROOT.selected_tag_list is not None:
+        # get tag tree list selection
+        selection = ROOT.tag_tree_list.selection()
+
+        # loop through selected tags
+        for selected in selection:
+            # check if item is section
+            if selected.startswith("S-"):
+                # this is a section, add all tags
+                for section in TAG_SECTIONS:
+                    # check if the section IDs match
+                    if section.db_id == int(selected[2:]):
+                        break
+                else:
+                    # no section found, skip this item
+                    continue
+
+                # check if section exists in selected_tag_list
+                if not ROOT.selected_tag_list.exists(selected):
+                    ROOT.selected_tag_list.insert("", tk.END, text=section.section_name, iid=selected)
+
+                # get section tags
+                for tag in db_handler.get_tags_in_section(section.db_id):
+                    # check if tag exists in the selected tree already
+                    if not ROOT.selected_tag_list.exists(f"T-{tag.db_id}"):
+                        ROOT.selected_tag_list.insert(selected, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
+            else:  # this is a tag, only add this tag
+                # get tag object from iid
+                tag = db_handler.get_tag(int(selected[2:]))
+
+                # find tag section
+                section = db_handler.get_tag_owner_section(tag.db_id)
+                # check if section exists in selected tags
+                section_iid = f"S-{section.db_id}"
+                if not ROOT.selected_tag_list.exists(section_iid):
+                    ROOT.selected_tag_list.insert("", tk.END, text=section.section_name, iid=section_iid)
+
+                if not ROOT.selected_tag_list.exists(f"T-{tag.db_id}"):
+                    ROOT.selected_tag_list.insert(section_iid, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
+
+
+def remove_tag_filter():
+    """
+    Removes a tag or section from the filter list
+    :return:
+    """
+    # ensure tag lists exist
+    if ROOT.tag_tree_list is not None and ROOT.selected_tag_list is not None:
+        # get tag tree list selection
+        selection = ROOT.selected_tag_list.selection()
+
+        # loop through selected tags
+        for selected in selection:
+            # check if item exists
+            if ROOT.selected_tag_list.exists(selected):
+                # delete if it does
+                ROOT.selected_tag_list.delete(selected)
+
+
+def clear_tag_filter():
+    """
+    Removes all tags and sections from the filter list
+    :return:
+    """
+    if ROOT.tag_tree_list is not None and ROOT.selected_tag_list is not None:
+        # loop through all children and delete
+        ROOT.selected_tag_list.delete(*ROOT.selected_tag_list.get_children())
+
+
+def apply_tag_filter():
+    """
+    Apply the filters chosen in the filter box to the clip search
+    :return:
+    """
+    global CURRENT_FILTER
+
+    if ROOT.tag_tree_list is not None and ROOT.selected_tag_list is not None:
+        # get all children that are sections
+        CURRENT_FILTER = []
+        for section_iid in ROOT.selected_tag_list.get_children():
+            # add section to current filter
+            CURRENT_FILTER.append([int(section_iid[2:]), []])
+
+            # get all children of section
+            for tag_iid in ROOT.selected_tag_list.get_children(section_iid):
+                CURRENT_FILTER[-1][-1].append(int(tag_iid[2:]))
+
+        # force refresh of clips
+        refresh_clips()
+
+        ROOT.filter_popup.destroy()
 
 
 def close_app():
