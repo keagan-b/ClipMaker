@@ -12,6 +12,7 @@ Folder exporting
 Previous/Next buttons
 Restart video after reaching end
 Subfolder support
+Start and end at clipped times
 """
 import os
 import db_handler

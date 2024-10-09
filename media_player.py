@@ -196,7 +196,6 @@ class MediaPlayer(tk.Frame):
 
     def on_stop(self, *_args):
         if self.current_path != "":
-            self.player.close()
             self.player.set_time(0)
             self.player.play()
 
