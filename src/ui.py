@@ -11,13 +11,13 @@ Each window is defined as its own function, and is placed on the UI stack throug
 # type hinting enabling
 from __future__ import annotations
 
-import os
 from utils import get_time_from_milliseconds, get_milliseconds_from_time
 from media_player import MediaPlayer, MediaSlider
-from tkinter import filedialog, ttk
+from tkinter import filedialog
 from functools import partial
-import tkinter as tk
 from tkinter import ttk
+import tkinter as tk
+import media_handler
 import db_handler
 
 from models import *
@@ -246,7 +246,7 @@ def create_ui() -> tk.Tk:
 
     tree_dir_menu.add_command(label="Add Folder", command=add_folder)
     tree_dir_menu.add_command(label="Remove Folder")
-    tree_dir_menu.add_command(label="Export Folder")
+    tree_dir_menu.add_command(label="Export Folder", command=export_clips)
     tree_dir_menu.add_separator()
     tree_dir_menu.add_command(label="Refresh Clips", command=refresh_clips)
     tree_dir_menu.add_command(label="Unhide Clips", command=unhide_clips)
@@ -257,7 +257,7 @@ def create_ui() -> tk.Tk:
     tree_clip_menu = tk.Menu(clip_list_frame, tearoff=0)
 
     tree_clip_menu.add_command(label="Hide Clip", command=hide_clip)
-    tree_clip_menu.add_command(label="Export Clip")
+    tree_clip_menu.add_command(label="Export Clip", command=export_clips)
 
     root.tree_clip_menu = tree_clip_menu
 
@@ -329,14 +329,14 @@ def tree_menu_popups(event):
         if not selected.startswith("D-"):
             # disable Remove Folder, Export Folder, & Unhide Clips options
             ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder", state="disabled")
-            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled")
+            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled", command=export_clips)
             ROOT.tree_dir_menu.add(itemType="command", label="Unhide Clips", state="disabled")
         else:
             # enable Remove Folder, Export Folder, & Unhide Clips options
             ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder",
                                       state="normal", command=remove_folder)
             ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder",
-                                      state="normal")
+                                      state="normal", command=export_clips)
             ROOT.tree_dir_menu.add(itemType="command", label="Unhide Clips",
                                    state="normal", command=unhide_clips)
 
@@ -468,6 +468,8 @@ def refresh_clips() -> None:
                 # clip does not match filter, skip
                 if not matching:
                     break
+
+                print("matches")
 
             if not clip.is_hidden and matching:
                 ROOT.clip_tree.insert(folder_obj, tk.END, text=clip.get_clip_name(), iid=f"C-{clip.db_id}")
@@ -1224,6 +1226,37 @@ def apply_tag_filter():
         refresh_clips()
 
         ROOT.filter_popup.destroy()
+
+
+def export_clips():
+    # ensure clip tree exists
+    if ROOT.clip_tree is not None:
+        # get output directory
+        output_dir = filedialog.askdirectory(mustexist=True)
+
+        # get selected clips
+        selected = ROOT.clip_tree.selection()[0]
+
+        # create export UI
+        media_handler.create_export_ui()
+
+        # check if this is a directory or not
+        if selected.startswith("D-"):
+            # create list of clips
+            clip_ids = []
+
+            # get all clips listed
+            clips = ROOT.clip_tree.get_children(selected)
+            for clip in clips:
+                clip_ids.append(int(clip[2:]))
+
+            media_handler.export_folder(clip_ids, output_dir)
+        else:
+            # get clip
+            clip = db_handler.get_clip_from_id(int(selected[2:]))
+
+            # export clip
+            media_handler.trim_clip(clip.path, output_dir, clip.trimmed_start, clip.trimmed_end)
 
 
 def close_app():

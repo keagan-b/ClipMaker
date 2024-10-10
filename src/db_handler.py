@@ -73,7 +73,7 @@ def get_database(path: str = "./clips.db", should_wipe=False) -> sqlite3.Connect
         custom_name TEXT,
         is_favorite INTEGER DEFAULT 0 CHECK(is_favorite == 0 || is_favorite == 1),
         is_hidden INTEGER DEFAULT 0 CHECK (is_hidden == 0 || is_hidden == 1),
-        trimmed_start INTEGER DEFAULT -1,
+        trimmed_start INTEGER DEFAULT 0,
         trimmed_end INTEGER default -1
     );
     """)
