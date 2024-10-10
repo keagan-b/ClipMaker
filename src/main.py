@@ -7,8 +7,6 @@ Creates database connection & starts UI loop
 
 TODO:
 UI Scaling
-Clip exporting
-Folder exporting
 Previous/Next buttons
 Restart video after reaching end
 Subfolder support
