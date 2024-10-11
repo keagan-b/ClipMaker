@@ -29,5 +29,5 @@ Additionally, this program relies on `ffmpeg-python`, which can be installed wit
 - [x] Tag creation & assignment
 - [x] Tag sections/groups
 - [x] Clip filtering/sorting with tags
-- [ ] Clip export options
+- [x] Clip export options
 - [ ] UI rework
