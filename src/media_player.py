@@ -90,6 +90,7 @@ class MediaPlayer(tk.Frame):
 
         # reset play text
         self.parent.play_btn.configure(text="⏸")
+
         # play media
         self.player.play()
 
@@ -190,6 +191,18 @@ class MediaPlayer(tk.Frame):
                 if end_var.get() == "-1":
                     # set correct max length
                     end_var.set(utils.get_time_from_milliseconds(self.player.get_length()))
+
+            # check if canvas has been resized
+            if self.video_canvas.winfo_width() != self.player.video_get_width(0) + 4:
+                # get video width
+                width = self.player.video_get_width(0)
+
+                # get video height
+                height = self.player.video_get_height(0)
+
+                # set canvas size
+                self.video_canvas.configure(width=width, height=height)
+                self.video_canvas.configure(scrollregion=(-width//2, -height//2, width//2, height//2))
 
         # set tick timer
         self._tick_timer = self.after(TICK_INCREMENT_MS, self.handle_tick)

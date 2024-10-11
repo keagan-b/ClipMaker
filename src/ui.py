@@ -51,6 +51,9 @@ def create_ui() -> tk.Tk:
     # create new root
     root = tk.Tk()
 
+    # set root to non-resizable
+    root.resizable(False, False)
+
     # set global root value
     ROOT = root
 
@@ -87,8 +90,8 @@ def create_ui() -> tk.Tk:
     # bind media timer variable to be access from the Media Player
     root.media_timer = media_timer
 
-    previous_btn = tk.Button(media_control_frame, text="Previous")
-    next_btn = tk.Button(media_control_frame, text="Next")
+    previous_btn = tk.Button(media_control_frame, text="Previous", command=previous_video)
+    next_btn = tk.Button(media_control_frame, text="Next", command=next_video)
 
     play_btn = tk.Button(media_control_frame, text="⏸", command=lambda: MEDIA_PLAYER.change_play_state())
 
@@ -329,7 +332,8 @@ def tree_menu_popups(event):
         if not selected.startswith("D-"):
             # disable Remove Folder, Export Folder, & Unhide Clips options
             ROOT.tree_dir_menu.insert(index=1, itemType="command", label="Remove Folder", state="disabled")
-            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled", command=export_clips)
+            ROOT.tree_dir_menu.insert(index=2, itemType="command", label="Export Folder", state="disabled",
+                                      command=export_clips)
             ROOT.tree_dir_menu.add(itemType="command", label="Unhide Clips", state="disabled")
         else:
             # enable Remove Folder, Export Folder, & Unhide Clips options
@@ -1257,6 +1261,50 @@ def export_clips():
 
             # export clip
             media_handler.trim_clip(clip.path, output_dir, clip.trimmed_start, clip.trimmed_end)
+
+
+def next_video():
+    """
+    Changes the current playing clip to the next in the clip list
+    :return:
+    """
+    # get current video index
+    selected = ROOT.clip_tree.selection()[0]
+
+    # loop through selected until the next one is not a directory
+    while True:
+        print(selected)
+        selected = ROOT.clip_tree.next(selected)
+
+        if selected == "" or selected.startswith("C-"):
+            break
+
+    # set new item on tree
+    ROOT.clip_tree.selection_set(selected)
+
+
+def previous_video():
+    """
+    Changes the current playing clip to the previous in the clip list
+    :return:
+    """
+
+    """
+    Changes the current playing clip to the next in the clip list
+    :return:
+    """
+    # get current video index
+    selected = ROOT.clip_tree.selection()[0]
+
+    # loop through selected until the next one is not a directory
+    while True:
+        selected = ROOT.clip_tree.prev(selected)
+
+        if selected == "" or selected.startswith("C-"):
+            break
+
+    # set new item on tree
+    ROOT.clip_tree.selection_set(selected)
 
 
 def close_app():
