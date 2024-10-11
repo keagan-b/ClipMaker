@@ -1,7 +1,7 @@
 # ClipMaker
 Small UI-based tool to help with the editing and categorizing of videos
 
-*Please note this is still a work in progress. Some features (such as exporting) do not currently work.*
+*Please note this is still a work in progress. Some features do not currently work, please see below.*
 
 ---
 
