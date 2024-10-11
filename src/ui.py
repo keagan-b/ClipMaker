@@ -907,7 +907,7 @@ def change_tag_dropdown(*_args) -> None:
 
     for tag in tags:
         # add in new options
-        tag_dropdown['menu'].add_command(label=tag.name)
+        tag_dropdown['menu'].add_command(label=tag.name, command=partial(tag_var.set,  tag.name))
 
     tag_var.set(tags[0].name)
 

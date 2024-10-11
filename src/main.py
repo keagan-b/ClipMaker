@@ -13,6 +13,8 @@ Subfolder support
 Start and end at clipped times
 Exporting status bar
 Fix export trimming
+Removing tag refreshes UI, not just tag list
+Tag menu doesn't update following tag deletion
 """
 import os
 import db_handler

@@ -208,9 +208,7 @@ class MediaPlayer(tk.Frame):
         self._tick_timer = self.after(TICK_INCREMENT_MS, self.handle_tick)
 
     def on_stop(self, *_args):
-        if self.current_path != "":
-            self.player.set_time(0)
-            self.player.play()
+        pass
 
     def _set_time(self, milliseconds: int) -> None:
         """
