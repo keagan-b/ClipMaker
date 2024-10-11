@@ -11,6 +11,8 @@ Previous/Next buttons
 Restart video after reaching end
 Subfolder support
 Start and end at clipped times
+Exporting status bar
+Fix export trimming
 """
 import os
 import db_handler

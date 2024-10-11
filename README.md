@@ -10,7 +10,9 @@ Small UI-based tool to help with the editing and categorizing of videos
 1. Import a folder by right-clicking the left most panel and selecting "Add Folder"
 2. Select a clip by clicking on its name in the tree view
 3. Change the display name of the clip and mark it as a favorite on the right side of the UI.
-4. Add tags by right-clicking the tag box on the bottom right
+4. Add tags by right-clicking the tag box on the right
+5. Filter clips based on assigned tags
+6. Export individual clips/folders by right-clicking it in the clip box
 
 ---
 

@@ -473,8 +473,6 @@ def refresh_clips() -> None:
                 if not matching:
                     break
 
-                print("matches")
-
             if not clip.is_hidden and matching:
                 ROOT.clip_tree.insert(folder_obj, tk.END, text=clip.get_clip_name(), iid=f"C-{clip.db_id}")
 
@@ -888,7 +886,6 @@ def change_tag_dropdown(*_args) -> None:
         tag_dropdown: tk.OptionMenu = ROOT.tag_dropdown
         tag_var: tk.StringVar = ROOT.tag_variable
     except AttributeError:
-        print("objs not found")
         return
 
     chosen_section = section_variable.get()
@@ -1107,11 +1104,16 @@ def open_filter_menu() -> None:
 
     # add current_filter items to selected_tag_list
     for section, tags in CURRENT_FILTER:
+        for obj in TAG_SECTIONS:
+            if obj.db_id == section:
+                section = obj
+
         # add section to tree list
-        section_item = tag_tree_list.insert("", tk.END, text=section.section_name, iid=f"S-{section.db_id}")
+        section_item = selected_tag_list.insert("", tk.END, text=section.section_name, iid=f"S-{section.db_id}")
         for tag in tags:
+            tag = db_handler.get_tag(tag)
             # add tags to section
-            tag_tree_list.insert(section_item, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
+            selected_tag_list.insert(section_item, tk.END, text=tag.name, iid=f"T-{tag.db_id}")
 
     # place objects on popup
     popup.grid()
@@ -1273,7 +1275,6 @@ def next_video():
 
     # loop through selected until the next one is not a directory
     while True:
-        print(selected)
         selected = ROOT.clip_tree.next(selected)
 
         if selected == "" or selected.startswith("C-"):
